@@ -19,8 +19,9 @@ import { getRectRotationOnText } from './selection';
 import { darkenHex } from './lib/utilities';
 
 export default class Page {
-	constructor(layer, originalPage) {
+	constructor(layer, originalPage, container) {
 		this.layer = layer;
+		this.container = container;
 		this.originalPage = originalPage;
 		this.pageIndex = originalPage.id - 1;
 		this.overlays = [];
@@ -28,13 +29,60 @@ export default class Page {
 		this.selectionColor = '#bad6fb';
 		this.previouslyAffected = false;
 
-		let canvas = document.createElement('canvas');
+		let canvas = this.originalPage.canvas.cloneNode();
 		canvas.width = this.originalPage.canvas.width;
 		canvas.height = this.originalPage.canvas.height;
 		this.originalCanvas = canvas;
+		this.originalCanvas.setAttribute('class', 'originalCanvas');
+		this.originalCanvas.setAttribute('z-index', 0);
+		this.originalCanvas.style.position = 'absolute';
+		this.originalCanvas.style.left = 0;
+		this.originalCanvas.style.top = 0;
 		this.originalContext = canvas.getContext('2d');
 		this.originalContext.drawImage(this.originalPage.canvas, 0, 0);
-		this.actualContext = this.originalPage.canvas.getContext('2d');
+
+		this.annotationCanvas = this.originalPage.canvas.cloneNode();
+		this.annotationCanvas.setAttribute('class', 'annatationCanvas');
+		this.annotationCanvas.setAttribute('z-index', 1);
+		this.annotationCanvas.style.position = 'absolute';
+		this.annotationCanvas.style.left = 0;
+		this.annotationCanvas.style.top = 0;
+		// this.annotationCanvas.width = this.originalPage.canvas.width;
+		// this.annotationCanvas.height = this.originalPage.canvas.height;
+		this.actualContext = this.annotationCanvas.getContext('2d');
+
+		this.variantCanvas = this.originalPage.canvas.cloneNode();
+		this.variantCanvas.setAttribute('class', 'variantCanvas');
+		this.variantCanvas.setAttribute('z-index', 2);
+		this.variantCanvas.style.position = 'absolute';
+		this.variantCanvas.style.left = 0;
+		this.variantCanvas.style.top = 0;
+		// this.variantCanvas.width = this.originalPage.canvas.width;
+		// this.variantCanvas.height = this.originalPage.canvas.height;
+
+		this.variantContext = this.variantCanvas.getContext('2d');
+
+		let div = this.originalPage.div.getElementsByClassName('canvasWrapper')[0];
+		// this.originalPage.div.append(this.originalCanvas);
+		div.append(this.annotationCanvas);
+		div.append(this.variantCanvas);
+
+		// const resizeObserver = new ResizeObserver((entries, observer) => {
+		// 	for (let entry of entries) {
+		// 		const w = entry.target.width;
+		// 		const h = entry.target.height;
+		// 		console.log(entry.target.style)
+		// 		observer.variantCanvas.setAttribute('width', w);
+		// 		observer.variantCanvas.setAttribute('height', h);
+		// 		observer.variantCanvas.style = entry.target.style;
+		// 	}
+		// });
+		// resizeObserver.variantCanvas = this.variantCanvas;
+		// resizeObserver.annotationCanvas = this.annotationCanvas;
+		// resizeObserver.observe(this.originalPage.canvas);
+		// console.log(this.annotationCanvas);
+		// console.log(this.originalPage);
+
 	}
 
 	getSortedObjects() {
@@ -167,6 +215,19 @@ export default class Page {
 				];
 			})
 		};
+	}
+
+	onScaleChanging() {
+		console.log('set zooming')
+		this.annotationCanvas.setAttribute('zooming', true);
+		this.annotationCanvas.style.width = '';
+		this.annotationCanvas.style.height = '';
+		this.annotationCanvas.style.transform = 'scale(1)';
+
+		this.variantCanvas.setAttribute('zooming', true);
+		this.variantCanvas.style.width = '';
+		this.variantCanvas.style.height = '';
+		this.variantCanvas.style.transform = 'scale(1)';
 	}
 
 	drawHover() {
@@ -589,10 +650,41 @@ export default class Page {
 			}
 		}
 
-		this.actualContext.save();
-		this.actualContext.drawImage(this.originalCanvas, 0, 0);
+		// this.actualContext.save();
 
+		// let container = this.container;
+
+		// const top = container.scrollTop;
+		// const bottom = top + container.clientHeight;
+		// const left = container.scrollLeft;
+		// const right = left + container.clientWidth;
+
+		// let element = this.originalPage.div;
+		// const currentWidth = element.offsetLeft + element.clientLeft;
+		// const currentHeight = element.offsetTop + element.clientTop;
+		// const viewWidth = element.clientWidth;
+		// const viewHeight = element.clientHeight;
+		// const viewRight = currentWidth + viewWidth;
+		// const viewBottom = currentHeight + viewHeight;
+		// console.log(element);
+		// console.log(container);
+		// console.log('top=%d,bottom=%d,left=%d,right=%d,t=%d,b=%d,l=%d,r=%d',
+		// 	top, bottom, left, right, currentHeight, viewBottom, currentWidth, viewRight);
+		// const t = Math.max(0, top - currentHeight);
+		// const h = Math.min(viewHeight, container.clientHeight);
+		// const l = Math.max(0, left - currentWidth);
+		// const w = Math.min(viewWidth, container.clientWidth);
+		// this.actualContext.drawImage(this.originalCanvas, l, t, this.originalPage.canvas.width, this.originalPage.canvas.height,
+		// 	l, t, this.originalPage.canvas.width, this.originalPage.canvas.height);
+		// this.actualContext.drawImage(this.originalCanvas, 0, 0);
+
+		this.annotationCanvas.width = this.annotationCanvas.width;
+		// The fatest way to drop all content of the canvas.
+		this.variantCanvas.width = this.variantCanvas.width;
 		for (let annotation of annotations) {
+			if (annotation._rendered) {
+				// continue;
+			}
 			if (annotation.type === 'highlight' && !(action?.type === 'updateAnnotationRange' && action.annotation.id === annotation.id)) {
 				this._renderHighlight(annotation);
 			}
@@ -619,6 +711,7 @@ export default class Page {
 					this._renderInk(annotation);
 				}
 			}
+			annotation._rendered = true;
 		}
 
 		if (action?.type === 'updateAnnotationRange' && (
@@ -689,14 +782,15 @@ export default class Page {
 
 
 		if (action?.type !== 'updateAnnotationRange' || !action?.triggered) {
-			this.actualContext.save();
+			let ctx = this.variantContext;
+			// ctx.save();
 			let selectedAnnotations = annotations.filter(x => selectedAnnotationIDs.includes(x.id));
 			for (let annotation of selectedAnnotations) {
 
-				this.actualContext.strokeStyle = '#6d95e0';
-				this.actualContext.beginPath();
-				this.actualContext.setLineDash([5 * devicePixelRatio, 3 * devicePixelRatio]);
-				this.actualContext.lineWidth = 2 * devicePixelRatio;
+				ctx.strokeStyle = '#6d95e0';
+				ctx.beginPath();
+				ctx.setLineDash([5 * devicePixelRatio, 3 * devicePixelRatio]);
+				ctx.lineWidth = 2 * devicePixelRatio;
 				let padding = 5 * devicePixelRatio;
 				let rect = getPositionBoundingRect(annotation.position, this.pageIndex);
 				let rotation = 0;
@@ -717,7 +811,7 @@ export default class Page {
 					}
 				}
 				if (annotation.type === 'image') {
-					this.actualContext.lineWidth = 3 * devicePixelRatio;
+					ctx.lineWidth = 3 * devicePixelRatio;
 				}
 				let tm = this.transform;
 				if (annotation.type === 'text') {
@@ -748,70 +842,70 @@ export default class Page {
 					[p1, p2, p3, p4, pml, pmr, pmt, pmb] = scaleShape([p1, p2, p3, p4], [p1, p2, p3, p4, pml, pmr, pmt, pmb], BOX_PADDING);
 				}
 				// Dashed lines
-				this.actualContext.beginPath();
-				this.actualContext.moveTo(...p1);
-				this.actualContext.lineTo(...p2);
-				this.actualContext.lineTo(...p3);
-				this.actualContext.lineTo(...p4);
-				this.actualContext.closePath();
+				ctx.beginPath();
+				ctx.moveTo(...p1);
+				ctx.lineTo(...p2);
+				ctx.lineTo(...p3);
+				ctx.lineTo(...p4);
+				ctx.closePath();
 				if (!(this.layer._readOnly || annotation.readOnly) && annotation.type === 'text') {
-					this.actualContext.moveTo(...pmt);
-					this.actualContext.lineTo(...pr);
+					ctx.moveTo(...pmt);
+					ctx.lineTo(...pr);
 				}
-				this.actualContext.stroke();
+				ctx.stroke();
 				const radius = 4 * devicePixelRatio;
-				this.actualContext.fillStyle = '#81b3ff';
+				ctx.fillStyle = '#81b3ff';
 
 				// Circles
 				if (!(this.layer._readOnly || annotation.readOnly)) {
 					if (['image', 'text', 'ink'].includes(annotation.type)) {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...p1, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...p1, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (['image', 'text', 'ink'].includes(annotation.type)) {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...p2, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...p2, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (['image', 'text', 'ink'].includes(annotation.type)) {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...p4, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...p4, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (['image', 'text', 'ink'].includes(annotation.type)) {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...p3, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...p3, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (['image', 'text'].includes(annotation.type)) {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...pmr, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...pmr, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (['image', 'text'].includes(annotation.type)) {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...pml, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...pml, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (annotation.type === 'image') {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...pmt, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...pmt, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (annotation.type === 'image') {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...pmb, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...pmb, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 					if (annotation.type === 'text') {
-						this.actualContext.beginPath();
-						this.actualContext.arc(...pr, radius, 0, 2 * Math.PI, false);
-						this.actualContext.fill();
+						ctx.beginPath();
+						ctx.arc(...pr, radius, 0, 2 * Math.PI, false);
+						ctx.fill();
 					}
 				}
 			}
-			this.actualContext.restore();
+			// ctx.restore();
 		}
 
 		let annotation = annotations.find(x => x.id === selectedAnnotationIDs[0]);
@@ -825,7 +919,7 @@ export default class Page {
 				&& (!annotation2.position.nextPageRects || this.layer._pdfPages[this.pageIndex + 1])) {
 				let { chars } = this.layer._pdfPages[this.pageIndex];
 				let position = this.p2v(annotation2.position);
-				this.actualContext.save();
+				// this.actualContext.save();
 				this.actualContext.globalCompositeOperation = 'multiply';
 				this.actualContext.fillStyle = annotation2.color;
 				let startRect;
@@ -892,12 +986,12 @@ export default class Page {
 					let rect = endRect;
 					this.actualContext.fillRect(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
 				}
-				this.actualContext.restore();
+				// this.actualContext.restore();
 			}
 		}
 
 
-		this.actualContext.save();
+		// this.actualContext.save();
 		this.actualContext.globalCompositeOperation = 'multiply';
 		if (selectionRanges.length && !selectionRanges[0].collapsed && ['highlight', 'underline'].includes(this.layer._tool.type)) {
 			let annotation = this.layer._getAnnotationFromSelectionRanges(selectionRanges, this.layer._tool.type, this.layer._tool.color);
@@ -912,27 +1006,34 @@ export default class Page {
 			}
 		}
 		else {
+			// this.variantContext.save();
+			this.variantContext.globalAlpha = 0.5;
+			this.variantContext.fillStyle = SELECTION_COLOR;
+			this.variantContext.globalCompositeOperation = 'multiply';
+
 			for (let selectionRange of selectionRanges) {
 				let { position } = selectionRange;
 				if (position.pageIndex !== this.pageIndex) {
 					continue;
 				}
 				position = this.p2v(position);
-				this.actualContext.fillStyle = SELECTION_COLOR;
 				for (let rect of position.rects) {
-					this.actualContext.fillRect(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
+					this.variantContext.fillRect(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]);
 				}
 			}
+			// this.variantContext.restore();
 		}
-		this.actualContext.restore();
+		// this.actualContext.restore();
 
 
 		if (action) {
+			let ctx = this.variantContext;
+			// ctx.save();
 			if (action.type === 'moveAndDrag' && action.triggered) {
 				if (action.annotation.position.pageIndex === this.pageIndex) {
-					this.actualContext.strokeStyle = '#aaaaaa';
-					this.actualContext.setLineDash([5 * devicePixelRatio, 3 * devicePixelRatio]);
-					this.actualContext.lineWidth = 2 * devicePixelRatio;
+					ctx.strokeStyle = '#aaaaaa';
+					ctx.setLineDash([5 * devicePixelRatio, 3 * devicePixelRatio]);
+					ctx.lineWidth = 2 * devicePixelRatio;
 					let rect = getPositionBoundingRect(action.position);
 					let tm = this.transform;
 					if (annotation.type === 'text') {
@@ -950,13 +1051,13 @@ export default class Page {
 					p4 = this.getViewPoint(p4, tm);
 					let BOX_PADDING = 10 * devicePixelRatio;
 					[p1, p2, p3, p4] = scaleShape([p1, p2, p3, p4], [p1, p2, p3, p4], BOX_PADDING);
-					this.actualContext.beginPath();
-					this.actualContext.moveTo(...p1);
-					this.actualContext.lineTo(...p2);
-					this.actualContext.lineTo(...p3);
-					this.actualContext.lineTo(...p4);
-					this.actualContext.closePath();
-					this.actualContext.stroke();
+					ctx.beginPath();
+					ctx.moveTo(...p1);
+					ctx.lineTo(...p2);
+					ctx.lineTo(...p3);
+					ctx.lineTo(...p4);
+					ctx.closePath();
+					ctx.stroke();
 				}
 			}
 			else if (action.type === 'image' && action.annotation) {
@@ -969,6 +1070,7 @@ export default class Page {
 					this._renderInk(action.annotation);
 				}
 			}
+			// ctx.restore();
 		}
 
 		// Highlight position
@@ -986,7 +1088,7 @@ export default class Page {
 			}
 		}
 
-		this.actualContext.restore();
+		// this.actualContext.restore();
 	}
 
 	nextPagePosition(position) {

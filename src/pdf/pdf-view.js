@@ -273,6 +273,7 @@ class PDFView {
 
 		await this._iframeWindow.PDFViewerApplication.initializedPromise;
 		this._iframeWindow.PDFViewerApplication.eventBus.on('documentinit', this._handleDocumentInit.bind(this));
+		this._iframeWindow.PDFViewerApplication.eventBus.on('scalechanging', this._handleScaleChanging.bind(this));
 
 		this._findController = new PDFFindController({
 			linkService: this._iframeWindow.PDFViewerApplication.pdfViewer.linkService,
@@ -445,7 +446,9 @@ class PDFView {
 
 		if (this._preview) {
 			this._detachPage(originalPage);
-			let page = new Page(this, originalPage);
+			let viewer = this._iframeWindow.PDFViewerApplication.pdfViewer;
+			let container = viewer.container;
+			let page = new Page(this, originalPage, container);
 			this._pages.push(page);
 			this._render();
 			return;
@@ -465,7 +468,9 @@ class PDFView {
 			}
 		});
 
-		let page = new Page(this, originalPage);
+		let viewer = this._iframeWindow.PDFViewerApplication.pdfViewer;
+		let container = viewer.container;
+		let page = new Page(this, originalPage, container);
 
 		let pageIndex = originalPage.id - 1;
 
@@ -603,32 +608,12 @@ class PDFView {
 
 
 	_render(pageIndexes) {
-		let viewer = this._iframeWindow.PDFViewerApplication.pdfViewer;
-		let container = viewer.container;
-		let pages = viewer._pages;
-
-		const top = container.scrollTop,
-		  bottom = top + container.clientHeight;
-		const left = container.scrollLeft,
-		  right = left + container.clientWidth;
-
+		let visible_pages = this._iframeWindow.PDFViewerApplication.pdfViewer._getVisiblePages();
+		let visible_page_indexes = visible_pages.views.map(view => { return view.id - 1; });
 		for (let page of this._pages) {
-			let element = pages[page.pageIndex].div;
-			const currentWidth = element.offsetLeft + element.clientLeft;
-			const currentHeight = element.offsetTop + element.clientTop;
-			const viewWidth = element.clientWidth,
-			  viewHeight = element.clientHeight;
-			const viewRight = currentWidth + viewWidth;
-			const viewBottom = currentHeight + viewHeight;
-			if (
-			  viewBottom <= top ||
-			  currentHeight >= bottom ||
-			  viewRight <= left ||
-			  currentWidth >= right
-			) {
-			  continue;
+			if (!visible_page_indexes.includes(page.pageIndex)) {
+				continue;
 			}
-
 			if (!pageIndexes || pageIndexes.includes(page.pageIndex)) {
 				page.render();
 			}
@@ -3160,6 +3145,13 @@ class PDFView {
 				return;
 			}
 			this._onSetDataTransferAnnotations(event.clipboardData, annotation, true);
+		}
+	}
+
+	_handleScaleChanging(event) {
+		console.log('scalechanging event');
+		for (let page of this._pages) {
+			page.onScaleChanging();
 		}
 	}
 
